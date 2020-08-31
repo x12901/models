@@ -64,11 +64,13 @@ def _get_classifier_parameters(
     dataset_num_private_threads: Optional[int] = None,
     loss_scale: Optional[str] = None,
     report_metrics: bool = True,
+    all_reduce_alg: Optional[str] = None,
     batchnorm_spatial_persistent: bool = False) -> MutableMapping[str, Any]:
   """Gets classifier trainer's ResNet parameters."""
   params = {
       'runtime': {
           'num_gpus': num_gpus,
+          'all_reduce_alg': all_reduce_alg,
           'distribution_strategy': distribution_strategy,
           'run_eagerly': run_eagerly,
           'enable_xla': enable_xla,
@@ -339,6 +341,7 @@ class KerasClassifierBenchmarkBase(keras_benchmark.KerasBenchmark):
       per_replica_batch_size: int = 128,
       epochs_between_evals: int = 1,
       dtype: str = 'float32',
+      all_reduce_alg: Optional[str] = None,
       enable_xla: bool = False,
       run_eagerly: bool = False,
       gpu_thread_mode: Optional[str] = None,
@@ -355,6 +358,7 @@ class KerasClassifierBenchmarkBase(keras_benchmark.KerasBenchmark):
         builder=self.dataset_builder,
         skip_eval=True,
         num_gpus=num_gpus,
+        all_reduce_alg=all_reduce_alg,
         distribution_strategy=distribution_strategy,
         per_replica_batch_size=per_replica_batch_size,
         epochs=self.train_epochs,
@@ -1522,32 +1526,31 @@ class Resnet50MultiWorkerKerasAccuracy(keras_benchmark.KerasBenchmark):
     self._benchmark_common(eager=True, num_workers=8, all_reduce_alg='nccl')
 
 
-class Resnet50MultiWorkerKerasBenchmark(Resnet50KerasBenchmarkBase):
+class Resnet50MultiWorkerKerasBenchmark(KerasClassifierBenchmarkBase):
   """Resnet50 distributed benchmark tests with multiple workers."""
 
-  def __init__(self, output_dir=None, default_flags=None):
+  def __init__(self, output_dir=None, default_flags=None, tpu=None):
+    data_dir = os.path.join(root_data_dir, 'imagenet')
     super(Resnet50MultiWorkerKerasBenchmark, self).__init__(
-        output_dir=output_dir, default_flags=default_flags)
+        model='resnet', output_dir=output_dir, default_flags=default_flags,
+        tpu=tpu, dataset_builder='records', train_epochs=1, train_steps=110,
+        data_dir=data_dir)
 
   def _benchmark_common(self, eager, num_workers, all_reduce_alg):
     """Common to all benchmarks in this class."""
     self._setup()
-
-    num_gpus = 8
-    FLAGS.num_gpus = num_gpus
-    FLAGS.dtype = 'fp16'
-    FLAGS.enable_eager = eager
-    FLAGS.enable_xla = False
-    FLAGS.distribution_strategy = 'multi_worker_mirrored'
-    FLAGS.tf_gpu_thread_mode = 'gpu_private'
-    FLAGS.datasets_num_private_threads = 32
-    FLAGS.model_dir = self._get_model_dir(
-        'benchmark_{}_8_gpu_{}_worker_fp16_{}_tweaked'.format(
-            'eager' if eager else 'graph', num_workers, all_reduce_alg))
-    FLAGS.batch_size = 256 * num_gpus * num_workers
-    FLAGS.all_reduce_alg = all_reduce_alg
-
-    self._run_and_report_benchmark()
+    self._run_and_report_benchmark(
+      experiment_name='benchmark_{}_8_gpu_{}_worker_fp16_{}_tweaked'.format(
+            'eager' if eager else 'graph', num_workers, all_reduce_alg),
+      num_gpus=8,
+      enable_xla=False,
+      run_eagerly=eager,
+      distribution_strategy='multi_worker_mirrored',
+      dtype='fp16',
+      gpu_thread_mode='gpu_private',
+      dataset_num_private_threads=32,
+      per_replica_batch_size=256,
+      all_reduce_alg=all_reduce_alg)
 
   def benchmark_eager_8_gpu_1_worker_fp16_ring_tweaked(self):
     """Eager, 8 GPUs per worker, 1 worker, fp16, ring all-reduce."""
