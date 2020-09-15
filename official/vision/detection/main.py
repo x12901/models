@@ -86,7 +86,8 @@ def run_executor(params,
         all_reduce_alg=strategy_config.all_reduce_alg,
         num_packs=strategy_config.num_packs,
         tpu_address=strategy_config.tpu)
-
+  strategy = tf.distribute.MirroredStrategy(devices=["/gpu:0", "/gpu:1"],
+                                            cross_device_ops=tf.distribute.HierarchicalCopyAllReduce())
   num_workers = int(strategy.num_replicas_in_sync + 7) // 8
   is_multi_host = (int(num_workers) >= 2)
 
