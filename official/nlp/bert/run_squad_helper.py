@@ -13,9 +13,6 @@
 # limitations under the License.
 # ==============================================================================
 """Library for running BERT family models on SQuAD 1.1/2.0 in TF 2.x."""
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 
 import collections
 import json
@@ -186,8 +183,7 @@ def predict_squad_customized(strategy, input_meta_data, predict_tfrecord_path,
       FLAGS.predict_batch_size,
       is_training=False)
   predict_iterator = iter(
-      strategy.experimental_distribute_datasets_from_function(
-          predict_dataset_fn))
+      strategy.distribute_datasets_from_function(predict_dataset_fn))
 
   @tf.function
   def predict_step(iterator):

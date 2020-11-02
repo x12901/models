@@ -13,9 +13,6 @@
 # limitations under the License.
 # ==============================================================================
 """BERT classification or regression finetuning runner in TF 2.x."""
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 
 import functools
 import json
@@ -325,8 +322,7 @@ def get_predictions_and_labels(strategy,
       tf.experimental.async_clear_error()
     return preds, golds
 
-  test_iter = iter(
-      strategy.experimental_distribute_datasets_from_function(eval_input_fn))
+  test_iter = iter(strategy.distribute_datasets_from_function(eval_input_fn))
   predictions, labels = _run_evaluation(test_iter)
 
   return predictions, labels

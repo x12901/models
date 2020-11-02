@@ -997,11 +997,26 @@ class CocoMaskEvaluator(object_detection_evaluation.DetectionEvaluator):
           [num_boxes, image_height, image_width] containing groundtruth masks
           corresponding to the boxes. The elements of the array must be in
           {0, 1}.
+        InputDataFields.groundtruth_is_crowd (optional): integer numpy array of
+          shape [num_boxes] containing iscrowd flag for groundtruth boxes.
+        InputDataFields.groundtruth_area (optional): float numpy array of
+          shape [num_boxes] containing the area (in the original absolute
+          coordinates) of the annotated object.
     """
     if image_id in self._image_id_to_mask_shape_map:
       tf.logging.warning('Ignoring ground truth with image id %s since it was '
                          'previously added', image_id)
       return
+
+    # Drop optional fields if empty tensor.
+    groundtruth_is_crowd = groundtruth_dict.get(
+        standard_fields.InputDataFields.groundtruth_is_crowd)
+    groundtruth_area = groundtruth_dict.get(
+        standard_fields.InputDataFields.groundtruth_area)
+    if groundtruth_is_crowd is not None and not groundtruth_is_crowd.shape[0]:
+      groundtruth_is_crowd = None
+    if groundtruth_area is not None and not groundtruth_area.shape[0]:
+      groundtruth_area = None
 
     groundtruth_instance_masks = groundtruth_dict[
         standard_fields.InputDataFields.groundtruth_instance_masks]
@@ -1018,7 +1033,9 @@ class CocoMaskEvaluator(object_detection_evaluation.DetectionEvaluator):
             groundtruth_classes=groundtruth_dict[standard_fields.
                                                  InputDataFields.
                                                  groundtruth_classes],
-            groundtruth_masks=groundtruth_instance_masks))
+            groundtruth_masks=groundtruth_instance_masks,
+            groundtruth_is_crowd=groundtruth_is_crowd,
+            groundtruth_area=groundtruth_area))
     self._annotation_id += groundtruth_dict[standard_fields.InputDataFields.
                                             groundtruth_boxes].shape[0]
     self._image_id_to_mask_shape_map[image_id] = groundtruth_dict[
@@ -1174,18 +1191,20 @@ class CocoMaskEvaluator(object_detection_evaluation.DetectionEvaluator):
                   groundtruth_instance_masks_batched,
                   groundtruth_is_crowd_batched, num_gt_boxes_per_image,
                   detection_scores_batched, detection_classes_batched,
-                  detection_masks_batched, num_det_boxes_per_image):
+                  detection_masks_batched, num_det_boxes_per_image,
+                  original_image_spatial_shape):
       """Update op for metrics."""
 
       for (image_id, groundtruth_boxes, groundtruth_classes,
            groundtruth_instance_masks, groundtruth_is_crowd, num_gt_box,
            detection_scores, detection_classes,
-           detection_masks, num_det_box) in zip(
+           detection_masks, num_det_box, original_image_shape) in zip(
                image_id_batched, groundtruth_boxes_batched,
                groundtruth_classes_batched, groundtruth_instance_masks_batched,
                groundtruth_is_crowd_batched, num_gt_boxes_per_image,
                detection_scores_batched, detection_classes_batched,
-               detection_masks_batched, num_det_boxes_per_image):
+               detection_masks_batched, num_det_boxes_per_image,
+               original_image_spatial_shape):
         self.add_single_ground_truth_image_info(
             image_id, {
                 'groundtruth_boxes':
@@ -1193,7 +1212,8 @@ class CocoMaskEvaluator(object_detection_evaluation.DetectionEvaluator):
                 'groundtruth_classes':
                     groundtruth_classes[:num_gt_box],
                 'groundtruth_instance_masks':
-                    groundtruth_instance_masks[:num_gt_box],
+                    groundtruth_instance_masks[:num_gt_box][
+                        :original_image_shape[0], :original_image_shape[1]],
                 'groundtruth_is_crowd':
                     groundtruth_is_crowd[:num_gt_box]
             })
@@ -1201,13 +1221,16 @@ class CocoMaskEvaluator(object_detection_evaluation.DetectionEvaluator):
             image_id, {
                 'detection_scores': detection_scores[:num_det_box],
                 'detection_classes': detection_classes[:num_det_box],
-                'detection_masks': detection_masks[:num_det_box]
+                'detection_masks': detection_masks[:num_det_box][
+                    :original_image_shape[0], :original_image_shape[1]]
             })
 
     # Unpack items from the evaluation dictionary.
     input_data_fields = standard_fields.InputDataFields
     detection_fields = standard_fields.DetectionResultFields
     image_id = eval_dict[input_data_fields.key]
+    original_image_spatial_shape = eval_dict[
+        input_data_fields.original_image_spatial_shape]
     groundtruth_boxes = eval_dict[input_data_fields.groundtruth_boxes]
     groundtruth_classes = eval_dict[input_data_fields.groundtruth_classes]
     groundtruth_instance_masks = eval_dict[
@@ -1259,7 +1282,7 @@ class CocoMaskEvaluator(object_detection_evaluation.DetectionEvaluator):
         image_id, groundtruth_boxes, groundtruth_classes,
         groundtruth_instance_masks, groundtruth_is_crowd,
         num_gt_boxes_per_image, detection_scores, detection_classes,
-        detection_masks, num_det_boxes_per_image
+        detection_masks, num_det_boxes_per_image, original_image_spatial_shape
     ], [])
 
   def get_estimator_eval_metric_ops(self, eval_dict):
@@ -1286,15 +1309,15 @@ class CocoMaskEvaluator(object_detection_evaluation.DetectionEvaluator):
     metric_names = ['DetectionMasks_Precision/mAP',
                     'DetectionMasks_Precision/mAP@.50IOU',
                     'DetectionMasks_Precision/mAP@.75IOU',
-                    'DetectionMasks_Precision/mAP (large)',
-                    'DetectionMasks_Precision/mAP (medium)',
                     'DetectionMasks_Precision/mAP (small)',
+                    'DetectionMasks_Precision/mAP (medium)',
+                    'DetectionMasks_Precision/mAP (large)',
                     'DetectionMasks_Recall/AR@1',
                     'DetectionMasks_Recall/AR@10',
                     'DetectionMasks_Recall/AR@100',
-                    'DetectionMasks_Recall/AR@100 (large)',
+                    'DetectionMasks_Recall/AR@100 (small)',
                     'DetectionMasks_Recall/AR@100 (medium)',
-                    'DetectionMasks_Recall/AR@100 (small)']
+                    'DetectionMasks_Recall/AR@100 (large)']
     if self._include_metrics_per_category:
       for category_dict in self._categories:
         metric_names.append('DetectionMasks_PerformanceByCategory/mAP/' +

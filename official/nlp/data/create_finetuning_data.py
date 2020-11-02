@@ -14,10 +14,6 @@
 # ==============================================================================
 """BERT finetuning task dataset generator."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import functools
 import json
 import os
@@ -51,9 +47,9 @@ flags.DEFINE_string(
     "for the task.")
 
 flags.DEFINE_enum("classification_task_name", "MNLI",
-                  ["AX", "COLA", "MNLI", "MRPC", "PAWS-X", "QNLI", "QQP", "RTE",
-                   "SST-2", "STS-B", "WNLI", "XNLI", "XTREME-XNLI",
-                   "XTREME-PAWS-X"],
+                  ["AX", "COLA", "IMDB", "MNLI", "MRPC", "PAWS-X", "QNLI",
+                   "QQP", "RTE", "SST-2", "STS-B", "WNLI", "XNLI",
+                   "XTREME-XNLI", "XTREME-PAWS-X"],
                   "The name of the task to train BERT classifier. The "
                   "difference between XTREME-XNLI and XNLI is: 1. the format "
                   "of input tsv files; 2. the dev set for XTREME is english "
@@ -186,6 +182,8 @@ def generate_classifier_dataset():
             classifier_data_lib.AxProcessor,
         "cola":
             classifier_data_lib.ColaProcessor,
+        "imdb":
+            classifier_data_lib.ImdbProcessor,
         "mnli":
             functools.partial(classifier_data_lib.MnliProcessor,
                               mnli_type=FLAGS.mnli_type),

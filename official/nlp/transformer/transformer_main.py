@@ -17,9 +17,6 @@
 See README for description of setting the training schedule and evaluating the
 BLEU score.
 """
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 
 import os
 import tempfile
@@ -159,6 +156,7 @@ class TransformerTask(object):
     params["enable_metrics_in_training"] = flags_obj.enable_metrics_in_training
     params["steps_between_evals"] = flags_obj.steps_between_evals
     params["enable_checkpointing"] = flags_obj.enable_checkpointing
+    params["save_weights_only"] = flags_obj.save_weights_only
 
     self.distribution_strategy = distribute_utils.get_distribution_strategy(
         distribution_strategy=flags_obj.distribution_strategy,
@@ -226,12 +224,11 @@ class TransformerTask(object):
 
     if self.use_tpu:
       # Different from experimental_distribute_dataset,
-      # experimental_distribute_datasets_from_function requires
+      # distribute_datasets_from_function requires
       # per-replica/local batch size.
       params["batch_size"] /= self.distribution_strategy.num_replicas_in_sync
       train_ds = (
-          self.distribution_strategy
-          .experimental_distribute_datasets_from_function(
+          self.distribution_strategy.distribute_datasets_from_function(
               lambda ctx: data_pipeline.train_input_fn(params, ctx)))
     else:
       train_ds = data_pipeline.train_input_fn(params)
